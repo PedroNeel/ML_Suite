@@ -1,0 +1,5 @@
+# Task2/requirements.txt
+torch==2.3.1
+torchvision==0.18.1
+matplotlib==3.8.4
+numpy==1.26.4

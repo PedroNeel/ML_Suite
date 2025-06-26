@@ -1,0 +1,68 @@
+[
+  {
+    "review": "The Apple iPhone 13 camera is spectacular but battery drains fast.",
+    "brands": [
+      "Apple",
+      "iPhone"
+    ],
+    "products": [
+      "Apple iPhone"
+    ],
+    "sentiment": "neutral",
+    "positive_words": 1,
+    "negative_words": 1
+  },
+  {
+    "review": "Samsung Galaxy Buds: Comfortable fit with average noise cancellation.",
+    "brands": [
+      "Samsung"
+    ],
+    "products": [
+      "Samsung Galaxy",
+      "Galaxy Buds"
+    ],
+    "sentiment": "positive",
+    "positive_words": 1,
+    "negative_words": 0
+  },
+  {
+    "review": "Amazon Echo Dot stopped working after 2 months. Disappointed!",
+    "brands": [
+      "Amazon"
+    ],
+    "products": [
+      "Amazon Echo",
+      "Echo Dot"
+    ],
+    "sentiment": "negative",
+    "positive_words": 0,
+    "negative_words": 2
+  },
+  {
+    "review": "Sony WH-1000XM4 headphones have amazing noise cancellation.",
+    "brands": [
+      "Sony"
+    ],
+    "products": [
+      "Sony WH-1000XM4"
+    ],
+    "sentiment": "positive",
+    "positive_words": 1,
+    "negative_words": 0
+  },
+  {
+    "review": "Microsoft Surface Pro keyboard stopped functioning after 3 weeks.",
+    "brands": [
+      "Microsoft"
+    ],
+    "products": [
+      "Surface Pro keyboard",
+      "Pro keyboard",
+      "Microsoft Surface",
+      "Surface Pro"
+    ],
+    "sentiment": "negative",
+    "positive_words": 0,
+    "negative_words": 1
+  }
+]
