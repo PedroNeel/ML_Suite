@@ -1,56 +1,49 @@
-# Add this to your app.py to download a pre-trained model
-import urllib.request
-import os
-
-MODEL_URL = "https://github.com/rasbt/mnist-cnn-pytorch/raw/main/mnist_cnn.pth"
-MODEL_PATH = "mnist_cnn.pth"
-
-if not os.path.exists(MODEL_PATH):
-    st.info("Downloading pre-trained model...")
-    urllib.request.urlretrieve(MODEL_URL, MODEL_PATH)
-    st.success("Pre-trained model downloaded!")
-
-# app.py (Fixed Version)
+# app.py (Fixed Import Structure)
 import os
 import sys
 import subprocess
 import urllib.request
 
-# Check and install required packages
+# --- Package Installation Section (No Streamlit usage here) ---
 try:
-    import streamlit as st
-    from streamlit_drawable_canvas import st_canvas
+    # Try importing required packages
     import numpy as np
     import torch
     from torchvision import transforms
     from PIL import Image
 except ImportError:
-    # Install missing packages
+    # Install missing packages without using Streamlit
+    print("Installing required packages...")
     requirements = [
-        "streamlit", 
-        "streamlit-drawable-canvas", 
         "numpy", 
         "torch", 
         "torchvision", 
         "Pillow"
     ]
-    
-    print("Installing required packages...")
     subprocess.check_call([sys.executable, "-m", "pip", "install"] + requirements)
     
-    # Now re-import
-    import streamlit as st
-    from streamlit_drawable_canvas import st_canvas
+    # Re-import after installation
     import numpy as np
     import torch
     from torchvision import transforms
     from PIL import Image
 
-# Add model download functionality
+# Now safely import Streamlit and canvas
+try:
+    import streamlit as st
+    from streamlit_drawable_canvas import st_canvas
+except ImportError:
+    print("Installing Streamlit and canvas...")
+    subprocess.check_call([sys.executable, "-m", "pip", "install", 
+                          "streamlit", "streamlit-drawable-canvas"])
+    import streamlit as st
+    from streamlit_drawable_canvas import st_canvas
+
+# --- Model Download Section ---
 MODEL_URL = "https://github.com/rasbt/mnist-cnn-pytorch/raw/main/mnist_cnn.pth"
 MODEL_PATH = "mnist_cnn.pth"
 
-# Download model if not exists
+# Download model if not exists (using Streamlit now)
 if not os.path.exists(MODEL_PATH):
     st.info("Downloading pre-trained model...")
     try:
@@ -60,7 +53,7 @@ if not os.path.exists(MODEL_PATH):
         st.error(f"Model download failed: {str(e)}")
         st.stop()
 
-# Define the CNN model class
+# --- Model Definition ---
 class CNN(torch.nn.Module):
     def __init__(self):
         super(CNN, self).__init__()
@@ -82,29 +75,28 @@ class CNN(torch.nn.Module):
         x = self.fc2(x)
         return x
 
-# Load the model
+# --- Streamlit App ---
 @st.cache_resource
 def load_model():
     model = CNN()
     if os.path.exists(MODEL_PATH):
         model.load_state_dict(torch.load(MODEL_PATH, map_location='cpu'))
     else:
-        st.error("Model file not found")
+        st.error("Model file not found after download attempt")
         st.stop()
     model.eval()
     return model
 
 model = load_model()
 
-# Streamlit app
 st.title("🎨 MNIST Digit Classifier")
 st.write("Draw a digit (0-9) in the canvas below")
 
 # Create a drawing canvas
 canvas_result = st_canvas(
-    fill_color="rgba(255, 255, 255, 1)",  # White background
+    fill_color="rgba(255, 255, 255, 1)",
     stroke_width=15,
-    stroke_color="#000000",  # Black drawing
+    stroke_color="#000000",
     background_color="#FFFFFF",
     height=280,
     width=280,
