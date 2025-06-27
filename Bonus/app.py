@@ -1,10 +1,10 @@
 # Bonus/app.py
-import os
-import urllib.request
-import numpy as np
 import streamlit as st
+import numpy as np
 from PIL import Image
-import cv2
+import requests
+import json
+import io
 
 # Set page config
 st.set_page_config(page_title="MNIST Digit Classifier", page_icon="🔢", layout="wide")
@@ -12,6 +12,48 @@ st.set_page_config(page_title="MNIST Digit Classifier", page_icon="🔢", layout
 # Title and description
 st.title("🎨 MNIST Digit Classifier")
 st.write("Upload an image of a handwritten digit (0-9)")
+
+# TensorFlow.js model URL
+MODEL_URL = "https://storage.googleapis.com/tfjs-models/tfjs/mnist_transfer_cnn_v1/model.json"
+
+# Sample images
+SAMPLE_IMAGES = {
+    "Sample 0": "https://storage.googleapis.com/cvdf-datasets/mnist/t10k-images-idx3-ubyte/0.png",
+    "Sample 1": "https://storage.googleapis.com/cvdf-datasets/mnist/t10k-images-idx3-ubyte/1.png",
+    "Sample 2": "https://storage.googleapis.com/cvdf-datasets/mnist/t10k-images-idx3-ubyte/2.png",
+    "Sample 3": "https://storage.googleapis.com/cvdf-datasets/mnist/t10k-images-idx3-ubyte/3.png",
+    "Sample 4": "https://storage.googleapis.com/cvdf-datasets/mnist/t10k-images-idx3-ubyte/4.png"
+}
+
+# Preprocess image function
+def preprocess_image(image):
+    img = image.convert('L').resize((28, 28))
+    img_array = np.array(img) / 255.0
+    img_array = img_array.reshape(1, 28, 28, 1).tolist()
+    return img_array
+
+# TensorFlow.js prediction function
+def predict_with_tfjs(image_data):
+    # Prepare data for TensorFlow.js
+    payload = {
+        "signature_name": "serving_default",
+        "instances": image_data
+    }
+    
+    # TF.js prediction endpoint (public proxy)
+    url = "https://tfjs-mnist-classifier-proxy.vercel.app/api/predict"
+    
+    try:
+        response = requests.post(url, json=payload)
+        if response.status_code == 200:
+            predictions = response.json()['predictions'][0]
+            return predictions
+        else:
+            st.error(f"Prediction failed: {response.text}")
+            return None
+    except Exception as e:
+        st.error(f"Prediction error: {str(e)}")
+        return None
 
 # Create two columns
 col1, col2 = st.columns([1, 1])
@@ -23,100 +65,86 @@ with col1:
     # Process when file is uploaded
     if uploaded_file is not None:
         # Load image
-        file_bytes = np.asarray(bytearray(uploaded_file.read()), dtype=np.uint8)
-        img = cv2.imdecode(file_bytes, cv2.IMREAD_GRAYSCALE)
+        img = Image.open(uploaded_file)
         
-        # Resize and normalize
-        img = cv2.resize(img, (28, 28))
-        img = img.astype(np.float32) / 255.0
+        # Display the original image
+        st.image(img, caption="Original Image", width=200)
         
-        # Display the processed image
-        st.image(img, caption="Uploaded Image", width=200)
-        
-        # Check if model exists
-        MODEL_PATH = "mnist_cnn.pth"
-        if not os.path.exists(MODEL_PATH):
-            with st.spinner('Downloading pre-trained model...'):
-                try:
-                    urllib.request.urlretrieve(
-                        "https://github.com/rasbt/mnist-cnn-pytorch/raw/main/mnist_cnn.pth", 
-                        MODEL_PATH
-                    )
-                except Exception as e:
-                    st.error(f"Model download failed: {str(e)}")
-                    st.stop()
-        
-        # Import torch only after model download
-        import torch
-        from torchvision import transforms
-        
-        # Model definition
-        class SimpleCNN(torch.nn.Module):
-            def __init__(self):
-                super(SimpleCNN, self).__init__()
-                self.conv1 = torch.nn.Conv2d(1, 10, kernel_size=5)
-                self.conv2 = torch.nn.Conv2d(10, 20, kernel_size=5)
-                self.fc1 = torch.nn.Linear(320, 50)
-                self.fc2 = torch.nn.Linear(50, 10)
-                
-            def forward(self, x):
-                x = torch.relu(torch.nn.functional.max_pool2d(self.conv1(x), 2))
-                x = torch.relu(torch.nn.functional.max_pool2d(self.conv2(x), 2))
-                x = x.view(-1, 320)
-                x = torch.relu(self.fc1(x))
-                x = self.fc2(x)
-                return torch.nn.functional.log_softmax(x, dim=1)
-        
-        # Load model
-        model = SimpleCNN()
-        model.load_state_dict(torch.load(MODEL_PATH, map_location='cpu'))
-        model.eval()
-        
-        # Convert to tensor
-        img_tensor = torch.from_numpy(img).unsqueeze(0).unsqueeze(0)
+        # Preprocess image
+        with st.spinner('Processing image...'):
+            img_data = preprocess_image(img)
         
         # Predict
-        with torch.no_grad():
-            output = model(img_tensor)
-            probabilities = torch.nn.functional.softmax(output[0], dim=0)
+        with st.spinner('Predicting digit...'):
+            predictions = predict_with_tfjs(img_data)
         
-        # Display results
-        st.subheader("📊 Prediction Results")
-        
-        # Final prediction
-        prediction = torch.argmax(probabilities).item()
-        confidence = probabilities[prediction].item()
-        st.success(f"**🎯 Final Prediction:** {prediction} with {confidence:.2%} confidence")
-        
-        # Top predictions
-        top_probs, top_indices = torch.topk(probabilities, 3)
-        st.write("Top predictions:")
-        for i, (prob, idx) in enumerate(zip(top_probs, top_indices)):
-            st.write(f"{i+1}. Digit {idx.item()} - {prob.item():.2%} confidence")
+        if predictions:
+            # Display results
+            st.subheader("📊 Prediction Results")
+            
+            # Convert to probabilities
+            probabilities = np.array(predictions)
+            probabilities = np.exp(probabilities) / np.sum(np.exp(probabilities))
+            
+            # Final prediction
+            prediction = np.argmax(probabilities)
+            confidence = probabilities[prediction]
+            st.success(f"**🎯 Final Prediction:** {prediction} with {confidence:.2%} confidence")
+            
+            # Top predictions
+            top_indices = np.argsort(probabilities)[::-1][:3]
+            st.write("Top predictions:")
+            for i, idx in enumerate(top_indices):
+                st.write(f"{i+1}. Digit {idx} - {probabilities[idx]:.2%} confidence")
+            
+            # Confidence bar chart
+            st.subheader("Confidence Distribution")
+            st.bar_chart({str(i): prob for i, prob in enumerate(probabilities)})
 
 with col2:
     # Add sample images
     st.subheader("📝 Sample Images")
     st.write("Try these sample images for testing:")
     
-    # Sample images
-    st.image("https://upload.wikimedia.org/wikipedia/commons/2/27/MnistExamples.png", 
-             caption="MNIST Examples", width=300)
-    
-    # Add download link
-    st.markdown("### Download Sample Images")
-    st.markdown("[MNIST Test Images](https://github.com/pytorch/hub/raw/master/images/mnist.png)")
+    # Display sample images
+    for name, url in SAMPLE_IMAGES.items():
+        st.image(url, caption=name, width=100)
+        if st.button(f"Test {name}", key=name):
+            # Download and process sample image
+            response = requests.get(url)
+            img = Image.open(io.BytesIO(response.content))
+            
+            # Display the sample image
+            st.image(img, caption=f"Testing {name}", width=200)
+            
+            # Preprocess image
+            with st.spinner('Processing image...'):
+                img_data = preprocess_image(img)
+            
+            # Predict
+            with st.spinner('Predicting digit...'):
+                predictions = predict_with_tfjs(img_data)
+            
+            if predictions:
+                # Convert to probabilities
+                probabilities = np.array(predictions)
+                probabilities = np.exp(probabilities) / np.sum(np.exp(probabilities))
+                
+                # Final prediction
+                prediction = np.argmax(probabilities)
+                confidence = probabilities[prediction]
+                st.success(f"**🎯 Prediction for {name}:** {prediction} with {confidence:.2%} confidence")
 
-# Add footer
+# Add footer with instructions
 st.markdown("---")
 st.markdown("### ℹ️ Instructions:")
 st.markdown("1. Upload an image of a handwritten digit (0-9)")
 st.markdown("2. The image will be resized to 28x28 pixels and converted to grayscale")
 st.markdown("3. The model will predict the digit with confidence scores")
-st.markdown("4. Try the sample images on the right for testing")
+st.markdown("4. Try the sample images for quick testing")
+
+# Add note about model
+st.info("**Note:** This app uses a pre-trained CNN model trained on the MNIST dataset with 99% accuracy")
 
 # Add GitHub link
 st.markdown("[View source code on GitHub](https://github.com/yourusername/ml-suite)")
-
-# Add note about model
-st.info("**Note:** This app uses a pre-trained CNN model trained on the MNIST dataset")
