@@ -1,57 +1,27 @@
-# app.py (Fixed Import Structure)
+# app.py (Streamlit Cloud Compatible)
 import os
-import sys
-import subprocess
 import urllib.request
-
-# --- Package Installation Section (No Streamlit usage here) ---
-try:
-    # Try importing required packages
-    import numpy as np
-    import torch
-    from torchvision import transforms
-    from PIL import Image
-except ImportError:
-    # Install missing packages without using Streamlit
-    print("Installing required packages...")
-    requirements = [
-        "numpy", 
-        "torch", 
-        "torchvision", 
-        "Pillow"
-    ]
-    subprocess.check_call([sys.executable, "-m", "pip", "install"] + requirements)
-    
-    # Re-import after installation
-    import numpy as np
-    import torch
-    from torchvision import transforms
-    from PIL import Image
-
-# Now safely import Streamlit and canvas
-try:
-    import streamlit as st
-    from streamlit_drawable_canvas import st_canvas
-except ImportError:
-    print("Installing Streamlit and canvas...")
-    subprocess.check_call([sys.executable, "-m", "pip", "install", 
-                          "streamlit", "streamlit-drawable-canvas"])
-    import streamlit as st
-    from streamlit_drawable_canvas import st_canvas
+import numpy as np
+import torch
+from torchvision import transforms
+from PIL import Image
+import streamlit as st
+from streamlit_drawable_canvas import st_canvas
 
 # --- Model Download Section ---
 MODEL_URL = "https://github.com/rasbt/mnist-cnn-pytorch/raw/main/mnist_cnn.pth"
 MODEL_PATH = "mnist_cnn.pth"
 
-# Download model if not exists (using Streamlit now)
+# Download model if not exists
 if not os.path.exists(MODEL_PATH):
-    st.info("Downloading pre-trained model...")
-    try:
-        urllib.request.urlretrieve(MODEL_URL, MODEL_PATH)
-        st.success("Pre-trained model downloaded successfully!")
-    except Exception as e:
-        st.error(f"Model download failed: {str(e)}")
-        st.stop()
+    with st.spinner('Downloading pre-trained model (25MB)... This may take a minute'):
+        try:
+            urllib.request.urlretrieve(MODEL_URL, MODEL_PATH)
+            st.success("Pre-trained model downloaded successfully!")
+        except Exception as e:
+            st.error(f"Model download failed: {str(e)}")
+            st.error("Please check your internet connection or try again later")
+            st.stop()
 
 # --- Model Definition ---
 class CNN(torch.nn.Module):
@@ -164,3 +134,4 @@ st.markdown("- Draw a single digit in the center of the canvas")
 st.markdown("- Make strokes thick and clear")
 st.markdown("- Avoid touching the edges of the canvas")
 st.markdown("- Click 'Clear Canvas' to start over")
+st.markdown("**Note:** This app uses a pre-trained MNIST CNN model")
