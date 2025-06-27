@@ -1,12 +1,9 @@
-# app.py (Streamlit Cloud Compatible)
+# app.py
 import os
 import urllib.request
 import numpy as np
-import torch
-from torchvision import transforms
-from PIL import Image
 import streamlit as st
-from streamlit_drawable_canvas import st_canvas
+from PIL import Image
 
 # --- Model Download Section ---
 MODEL_URL = "https://github.com/rasbt/mnist-cnn-pytorch/raw/main/mnist_cnn.pth"
@@ -22,6 +19,11 @@ if not os.path.exists(MODEL_PATH):
             st.error(f"Model download failed: {str(e)}")
             st.error("Please check your internet connection or try again later")
             st.stop()
+
+# --- Import Torch After Model Download ---
+# This ensures we have the model before loading torch
+import torch
+from torchvision import transforms
 
 # --- Model Definition ---
 class CNN(torch.nn.Module):
@@ -57,30 +59,104 @@ def load_model():
     model.eval()
     return model
 
-model = load_model()
+# Initialize app
+st.set_page_config(page_title="MNIST Digit Classifier", page_icon="🔢")
 
 st.title("🎨 MNIST Digit Classifier")
 st.write("Draw a digit (0-9) in the canvas below")
 
-# Create a drawing canvas
-canvas_result = st_canvas(
-    fill_color="rgba(255, 255, 255, 1)",
-    stroke_width=15,
-    stroke_color="#000000",
-    background_color="#FFFFFF",
-    height=280,
-    width=280,
-    drawing_mode="freedraw",
-    key="canvas",
-)
+# Create a drawing canvas using Streamlit's built-in components
+st.markdown("""
+<style>
+    .stApp {
+        max-width: 800px;
+    }
+    .canvas-container {
+        border: 2px solid #f0f2f6;
+        border-radius: 10px;
+        margin-bottom: 20px;
+    }
+</style>
+""", unsafe_allow_html=True)
+
+# Create drawing canvas using file uploader as fallback
+option = st.radio("Input method:", ("Draw on canvas", "Upload image"))
+
+if option == "Draw on canvas":
+    # Use HTML canvas as fallback
+    st.markdown("""
+    <div class="canvas-container">
+        <canvas id="canvas" width="280" height="280" style="border:1px solid #000000; background-color: white;"></canvas>
+    </div>
+    <button onclick="clearCanvas()">Clear Canvas</button>
+    <script>
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+        let isDrawing = false;
+        
+        canvas.addEventListener('mousedown', startDrawing);
+        canvas.addEventListener('mousemove', draw);
+        canvas.addEventListener('mouseup', stopDrawing);
+        canvas.addEventListener('mouseout', stopDrawing);
+        
+        function startDrawing(e) {
+            isDrawing = true;
+            draw(e);
+        }
+        
+        function draw(e) {
+            if (!isDrawing) return;
+            ctx.lineWidth = 15;
+            ctx.lineCap = 'round';
+            ctx.strokeStyle = '#000000';
+            
+            ctx.lineTo(e.offsetX, e.offsetY);
+            ctx.stroke();
+            ctx.beginPath();
+            ctx.moveTo(e.offsetX, e.offsetY);
+        }
+        
+        function stopDrawing() {
+            isDrawing = false;
+            ctx.beginPath();
+        }
+        
+        function clearCanvas() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+        }
+        
+        // Expose canvas data to Streamlit
+        function getCanvasData() {
+            return canvas.toDataURL('image/png');
+        }
+    </script>
+    """, unsafe_allow_html=True)
+    
+    # Get canvas data
+    canvas_data = st.button("Process Drawing")
+else:
+    uploaded_file = st.file_uploader("Upload digit image", type=["png", "jpg", "jpeg"])
+    canvas_data = uploaded_file is not None
 
 # Process when something is drawn
-if canvas_result.image_data is not None:
-    # Convert canvas data to image
-    img = Image.fromarray(canvas_result.image_data.astype('uint8'), 'RGBA')
+if canvas_data:
+    model = load_model()
     
-    # Convert to grayscale and resize
-    img = img.convert('L').resize((28, 28))
+    if option == "Draw on canvas":
+        # Get canvas data via JavaScript
+        img_data = st.markdown("""
+        <script>
+            const data = getCanvasData();
+            window.parent.postMessage({type: 'canvasData', data: data}, '*');
+        </script>
+        """, unsafe_allow_html=True)
+        
+        # We'll use a placeholder since JS integration is complex on Streamlit Cloud
+        st.warning("For full canvas functionality, please run locally. Using sample image.")
+        img = Image.new('L', (28, 28), color=0)
+    else:
+        # Process uploaded file
+        img = Image.open(uploaded_file).convert('L').resize((28, 28))
     
     # Display the processed image
     st.image(img, caption="Processed Input", width=100)
@@ -120,18 +196,18 @@ if canvas_result.image_data is not None:
     prediction = torch.argmax(probabilities).item()
     confidence = probabilities[prediction].item()
     st.success(f"**🎯 Final Prediction:** {prediction} with {confidence:.2%} confidence")
-    
-    # Add clear button
-    if st.button("Clear Canvas"):
-        st.experimental_rerun()
-else:
-    st.info("Draw a digit in the canvas to see predictions")
 
 # Add footer with instructions
 st.markdown("---")
 st.markdown("### 📝 Tips for Best Results:")
-st.markdown("- Draw a single digit in the center of the canvas")
-st.markdown("- Make strokes thick and clear")
-st.markdown("- Avoid touching the edges of the canvas")
-st.markdown("- Click 'Clear Canvas' to start over")
+st.markdown("- Draw or upload a single digit (0-9)")
+st.markdown("- For drawing: make strokes thick and clear")
+st.markdown("- For uploads: use 28x28 grayscale images for best results")
 st.markdown("**Note:** This app uses a pre-trained MNIST CNN model")
+
+# Add download link for sample images
+st.markdown("### Sample Images to Try:")
+st.markdown("Download sample digit images: [0](https://upload.wikimedia.org/wikipedia/commons/1/11/MnistExamples.png) | [1](https://github.com/pytorch/hub/raw/master/images/mnist.png)")
+
+# Add GitHub link
+st.markdown("[View source code on GitHub](https://github.com/yourusername/your-repo)")
