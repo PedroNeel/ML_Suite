@@ -1,5 +1,7 @@
+# Bonus/requirements.txt
 streamlit==1.33.0
 numpy==1.26.4
-torch==2.3.1
-torchvision==0.18.1
+torch==2.2.2
+torchvision==0.17.2
 Pillow==10.3.0
+scikit-learn==1.4.2

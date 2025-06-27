@@ -1,9 +1,15 @@
-# app.py
+# Bonus/app.py
 import os
 import urllib.request
 import numpy as np
 import streamlit as st
 from PIL import Image
+import io
+import base64
+import matplotlib.pyplot as plt
+
+# Set page config first
+st.set_page_config(page_title="MNIST Digit Classifier", page_icon="🔢", layout="wide")
 
 # --- Model Download Section ---
 MODEL_URL = "https://github.com/rasbt/mnist-cnn-pytorch/raw/main/mnist_cnn.pth"
@@ -21,7 +27,7 @@ if not os.path.exists(MODEL_PATH):
             st.stop()
 
 # --- Import Torch After Model Download ---
-# This ensures we have the model before loading torch
+# Import torch only after ensuring model is downloaded
 import torch
 from torchvision import transforms
 
@@ -31,7 +37,7 @@ class CNN(torch.nn.Module):
         super(CNN, self).__init__()
         self.conv1 = torch.nn.Conv2d(1, 32, kernel_size=3, padding=1)
         self.conv2 = torch.nn.Conv2d(32, 64, kernel_size=3, padding=1)
-        self.pool = torch.nn.MaxPool2d(2, 2)
+        self.pool = torch.nn.MaxPooling2d(2, 2)
         self.dropout = torch.nn.Dropout(0.5)
         self.fc1 = torch.nn.Linear(64*7*7, 128)
         self.fc2 = torch.nn.Linear(128, 10)
@@ -59,155 +65,82 @@ def load_model():
     model.eval()
     return model
 
-# Initialize app
-st.set_page_config(page_title="MNIST Digit Classifier", page_icon="🔢")
+model = load_model()
 
+# Title and description
 st.title("🎨 MNIST Digit Classifier")
-st.write("Draw a digit (0-9) in the canvas below")
+st.write("Upload an image of a handwritten digit (0-9)")
 
-# Create a drawing canvas using Streamlit's built-in components
-st.markdown("""
-<style>
-    .stApp {
-        max-width: 800px;
-    }
-    .canvas-container {
-        border: 2px solid #f0f2f6;
-        border-radius: 10px;
-        margin-bottom: 20px;
-    }
-</style>
-""", unsafe_allow_html=True)
+# Create two columns
+col1, col2 = st.columns([1, 1])
 
-# Create drawing canvas using file uploader as fallback
-option = st.radio("Input method:", ("Draw on canvas", "Upload image"))
-
-if option == "Draw on canvas":
-    # Use HTML canvas as fallback
-    st.markdown("""
-    <div class="canvas-container">
-        <canvas id="canvas" width="280" height="280" style="border:1px solid #000000; background-color: white;"></canvas>
-    </div>
-    <button onclick="clearCanvas()">Clear Canvas</button>
-    <script>
-        const canvas = document.getElementById('canvas');
-        const ctx = canvas.getContext('2d');
-        let isDrawing = false;
-        
-        canvas.addEventListener('mousedown', startDrawing);
-        canvas.addEventListener('mousemove', draw);
-        canvas.addEventListener('mouseup', stopDrawing);
-        canvas.addEventListener('mouseout', stopDrawing);
-        
-        function startDrawing(e) {
-            isDrawing = true;
-            draw(e);
-        }
-        
-        function draw(e) {
-            if (!isDrawing) return;
-            ctx.lineWidth = 15;
-            ctx.lineCap = 'round';
-            ctx.strokeStyle = '#000000';
-            
-            ctx.lineTo(e.offsetX, e.offsetY);
-            ctx.stroke();
-            ctx.beginPath();
-            ctx.moveTo(e.offsetX, e.offsetY);
-        }
-        
-        function stopDrawing() {
-            isDrawing = false;
-            ctx.beginPath();
-        }
-        
-        function clearCanvas() {
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
-        }
-        
-        // Expose canvas data to Streamlit
-        function getCanvasData() {
-            return canvas.toDataURL('image/png');
-        }
-    </script>
-    """, unsafe_allow_html=True)
+with col1:
+    # Image uploader
+    uploaded_file = st.file_uploader("Choose an image...", type=["png", "jpg", "jpeg"])
     
-    # Get canvas data
-    canvas_data = st.button("Process Drawing")
-else:
-    uploaded_file = st.file_uploader("Upload digit image", type=["png", "jpg", "jpeg"])
-    canvas_data = uploaded_file is not None
-
-# Process when something is drawn
-if canvas_data:
-    model = load_model()
-    
-    if option == "Draw on canvas":
-        # Get canvas data via JavaScript
-        img_data = st.markdown("""
-        <script>
-            const data = getCanvasData();
-            window.parent.postMessage({type: 'canvasData', data: data}, '*');
-        </script>
-        """, unsafe_allow_html=True)
-        
-        # We'll use a placeholder since JS integration is complex on Streamlit Cloud
-        st.warning("For full canvas functionality, please run locally. Using sample image.")
-        img = Image.new('L', (28, 28), color=0)
-    else:
-        # Process uploaded file
+    # Process when file is uploaded
+    if uploaded_file is not None:
+        # Load and process image
         img = Image.open(uploaded_file).convert('L').resize((28, 28))
-    
-    # Display the processed image
-    st.image(img, caption="Processed Input", width=100)
+        
+        # Display the processed image
+        st.image(img, caption="Uploaded Image", width=200)
+        
+        # Preprocess for model
+        transform = transforms.Compose([
+            transforms.ToTensor(),
+            transforms.Normalize((0.1307,), (0.3081,))
+        ])
+        img_tensor = transform(img).unsqueeze(0)  # Add batch dimension
 
-    # Preprocess for model
-    transform = transforms.Compose([
-        transforms.ToTensor(),
-        transforms.Normalize((0.1307,), (0.3081,))
-    ])
-    img_tensor = transform(img).unsqueeze(0)  # Add batch dimension
-
-    # Predict
-    with torch.no_grad():
-        output = model(img_tensor)
-        probabilities = torch.nn.functional.softmax(output[0], dim=0)
-    
-    # Display results
-    st.subheader("📊 Prediction Results")
-    
-    # Create two columns for visualizations
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        # Confidence bar chart
-        st.bar_chart(probabilities.numpy())
-    
-    with col2:
-        # Top predictions table
+        # Predict
+        with torch.no_grad():
+            output = model(img_tensor)
+            probabilities = torch.nn.functional.softmax(output[0], dim=0)
+        
+        # Display results
+        st.subheader("📊 Prediction Results")
+        
+        # Final prediction
+        prediction = torch.argmax(probabilities).item()
+        confidence = probabilities[prediction].item()
+        st.success(f"**🎯 Final Prediction:** {prediction} with {confidence:.2%} confidence")
+        
+        # Top predictions
         top_probs, top_indices = torch.topk(probabilities, 3)
-        predictions = [
-            {"Digit": str(i.item()), "Confidence": f"{p.item():.2%}"} 
-            for p, i in zip(top_probs, top_indices)
-        ]
-        st.table(predictions)
+        st.write("Top predictions:")
+        for i, (prob, idx) in enumerate(zip(top_probs, top_indices)):
+            st.write(f"{i+1}. Digit {idx.item()} - {prob.item():.2%} confidence")
+
+with col2:
+    # Add sample images
+    st.subheader("📝 Sample Images")
+    st.write("Try these sample images for testing:")
     
-    # Final prediction
-    prediction = torch.argmax(probabilities).item()
-    confidence = probabilities[prediction].item()
-    st.success(f"**🎯 Final Prediction:** {prediction} with {confidence:.2%} confidence")
+    # Sample images
+    sample_images = {
+        "Sample 0": "https://upload.wikimedia.org/wikipedia/commons/1/11/MnistExamples.png",
+        "Sample 1": "https://www.researchgate.net/profile/Steven-Young-5/publication/306056875/figure/fig1/AS:614214539337730@1523472448405/Example-images-from-the-MNIST-dataset.png",
+        "Sample 2": "https://www.researchgate.net/publication/334407282/figure/fig1/AS:779371090075648@1562860259263/Example-of-the-digits-in-the-MNIST-dataset.png"
+    }
+    
+    for name, url in sample_images.items():
+        st.image(url, caption=name, width=300)
+    
+    # Add download link for sample images
+    st.markdown("### Download Sample Images")
+    st.markdown("[MNIST Test Images](https://github.com/pytorch/hub/raw/master/images/mnist.png)")
 
 # Add footer with instructions
 st.markdown("---")
-st.markdown("### 📝 Tips for Best Results:")
-st.markdown("- Draw or upload a single digit (0-9)")
-st.markdown("- For drawing: make strokes thick and clear")
-st.markdown("- For uploads: use 28x28 grayscale images for best results")
-st.markdown("**Note:** This app uses a pre-trained MNIST CNN model")
-
-# Add download link for sample images
-st.markdown("### Sample Images to Try:")
-st.markdown("Download sample digit images: [0](https://upload.wikimedia.org/wikipedia/commons/1/11/MnistExamples.png) | [1](https://github.com/pytorch/hub/raw/master/images/mnist.png)")
+st.markdown("### ℹ️ Instructions:")
+st.markdown("1. Upload an image of a handwritten digit (0-9)")
+st.markdown("2. The image will be resized to 28x28 pixels and converted to grayscale")
+st.markdown("3. The model will predict the digit with confidence scores")
+st.markdown("4. Try the sample images on the right for testing")
 
 # Add GitHub link
-st.markdown("[View source code on GitHub](https://github.com/yourusername/your-repo)")
+st.markdown("[View source code on GitHub](https://github.com/yourusername/ml-suite)")
+
+# Add note about model
+st.info("**Note:** This app uses a pre-trained CNN model trained on the MNIST dataset with 99% accuracy")
